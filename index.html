@@ -68,8 +68,10 @@
 
     <div class="hint" id="hint">ボタン：英語表示 → 日本語表示 → 次の英語 …（1周は重複なし）</div>
 
+    <!-- ★ここを単語アプリと同じ並びに：次へ / 発音 / リセット -->
     <div class="btns">
       <button class="primary" id="nextBtn">はじめる</button>
+      <button id="speakBtn">🔊 発音</button>
       <button id="resetBtn" class="danger">リセット（最初から）</button>
     </div>
 
@@ -87,7 +89,6 @@
  * =========================================================
  */
 const IDIOMS = [
-  // --- 1〜212（あなたが貼ってくれた内容） ---
   { en: "be interested in ~", ja: "〜に興味がある" },
   { en: "be famous for ~", ja: "〜で有名だ" },
   { en: "be good at ~", ja: "〜が得意だ" },
@@ -328,7 +329,6 @@ const IDIOMS = [
   { en: "take it easy", ja: "気楽にする" },
   { en: "feel free to do", ja: "遠慮なく〜する" },
 
-  // --- 213〜300（不足分88個：重複なしで追加） ---
   { en: "as long as ~", ja: "〜である限り" },
   { en: "as far as ~", ja: "〜に関する限り" },
   { en: "as far as I know", ja: "私の知る限り" },
@@ -480,25 +480,32 @@ function saveAudioOn(on) {
 // =======================
 function pickEnglishVoice() {
   const voices = speechSynthesis.getVoices();
-  // iOSは voice が遅れて読み込まれることがあるので都度選ぶ
-  const preferred = voices.find(v =>
-    /en-US|en_US|English \(United States\)|Samantha|Karen/i.test(v.name + " " + v.lang)
-  );
-  if (preferred) return preferred;
-  const anyEn = voices.find(v => (v.lang || "").toLowerCase().startsWith("en"));
-  return anyEn || null;
+  const preferred =
+    voices.find(v => /Samantha|Karen/i.test(v.name || "")) ||
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("en-us")) ||
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("en-gb")) ||
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("en")) ||
+    null;
+  return preferred;
+}
+
+// "~" を読ませない（空にする）
+function cleanForSpeech(text) {
+  return String(text)
+    .replaceAll("~", "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function speakEnglish(text) {
   if (!window.speechSynthesis) return;
-  const audioOn = loadAudioOn();
-  if (!audioOn) return;
+  if (!loadAudioOn()) return;
 
   try { speechSynthesis.cancel(); } catch {}
 
-  const u = new SpeechSynthesisUtterance(text.replace("~", ""));
-  u.lang = "en-US";
+  const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
   const voice = pickEnglishVoice();
+  u.lang = voice?.lang || "en-US";
   if (voice) u.voice = voice;
   u.rate = 1.0;
   u.pitch = 1.0;
@@ -562,6 +569,7 @@ function nextAction() {
 }
 
 function resetAll() {
+  try { speechSynthesis.cancel(); } catch {}
   const st = freshState();
   saveState(st);
   setUI(st);
@@ -576,12 +584,12 @@ function init() {
   // voice読み込み遅延対策（iOS/Safari）
   if (window.speechSynthesis) {
     speechSynthesis.onvoiceschanged = () => updateAudioUI();
-    // 初回更新
     setTimeout(updateAudioUI, 200);
     setTimeout(updateAudioUI, 800);
   } else {
     document.getElementById("audioInfo").textContent = "voice: (not supported)";
     document.getElementById("audioToggle").disabled = true;
+    document.getElementById("speakBtn").disabled = true;
   }
 
   let st = loadState();
@@ -589,12 +597,18 @@ function init() {
     st = freshState();
     saveState(st);
   }
-  document.getElementById("progress").textContent = `1 / ${IDIOMS.length}`;
-
   setUI(st);
 
   document.getElementById("nextBtn").addEventListener("click", nextAction);
   document.getElementById("resetBtn").addEventListener("click", resetAll);
+
+  // ★追加：聞きたいときに押せる発音ボタン（単語アプリと同じ位置）
+  document.getElementById("speakBtn").addEventListener("click", () => {
+    const st2 = loadState();
+    if (!st2) return;
+    const cur = IDIOMS[st2.order[st2.index]];
+    speakEnglish(cur.en);
+  });
 
   document.getElementById("audioToggle").addEventListener("click", () => {
     const on = loadAudioOn();
