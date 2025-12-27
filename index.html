@@ -387,7 +387,7 @@ const IDIOMS = [
 
 
 // ======== 設定保存キー（自動発音ON/OFF） ========
-const AUTO_SPEAK_KEY = "vocab_auto_speak_v1";
+const AUTO_SPEAK_KEY = "IDIOMS_auto_speak_v1";
 
 // ======== 発音（Web Speech API） ========
 function speakEnglish(text) {
@@ -421,7 +421,7 @@ if ("speechSynthesis" in window) {
 }
 
 // ======== 保存キー（出題状態） ========
-const KEY = "vocab_app_state_v1";
+const KEY = "IDIOMS_app_state_v1";
 
 // ======== Fisher–Yates shuffle ========
 function shuffle(arr) {
@@ -433,7 +433,7 @@ function shuffle(arr) {
 }
 
 function freshState() {
-  const order = shuffle([...Array(VOCAB.length).keys()]);
+  const order = shuffle([...Array(IDIOMS.length).keys()]);
   return { order, index: 0, phase: 0 };
 }
 
@@ -443,8 +443,8 @@ function loadState() {
     if (!raw) return null;
     const st = JSON.parse(raw);
     if (!st || !Array.isArray(st.order) || typeof st.index !== "number" || typeof st.phase !== "number") return null;
-    if (st.order.length !== VOCAB.length) return null;
-    if (st.index < 0 || st.index > VOCAB.length) return null;
+    if (st.order.length !== IDIOMS.length) return null;
+    if (st.index < 0 || st.index > IDIOMS.length) return null;
     if (st.phase !== 0 && st.phase !== 1) return null;
     return st;
   } catch {
@@ -478,13 +478,13 @@ function setUI(st) {
   const btn = document.getElementById("nextBtn");
 
   // 1周終わったら新しいシャッフルで再スタート
-  if (st.index >= VOCAB.length) {
+  if (st.index >= IDIOMS.length) {
     st = freshState();
     saveState(st);
   }
 
-  const current = VOCAB[st.order[st.index]];
-  progressEl.textContent = `${st.index + 1} / ${VOCAB.length}`;
+  const current = IDIOMS[st.order[st.index]];
+  progressEl.textContent = `${st.index + 1} / ${IDIOMS.length}`;
 
   if (st.phase === 0) {
     wordEl.textContent = current.en;
@@ -525,8 +525,8 @@ function resetAll() {
 
 // ======== 初期化 ========
 function init() {
-  if (!VOCAB.length) {
-    document.getElementById("word").textContent = "VOCABが空です（単語リストを入れてください）";
+  if (!IDIOMS.length) {
+    document.getElementById("word").textContent = "IDIOMSが空です（単語リストを入れてください）";
     return;
   }
 
@@ -539,7 +539,7 @@ function init() {
     if (toggle.checked) {
       const st = loadState();
       if (st && st.phase === 0) {
-        const current = VOCAB[st.order[st.index]];
+        const current = IDIOMS[st.order[st.index]];
         speakEnglish(current.en);
       }
     }
@@ -557,7 +557,7 @@ function init() {
   document.getElementById("speakBtn").addEventListener("click", () => {
     const st = loadState();
     if (!st) return;
-    const current = VOCAB[st.order[st.index]];
+    const current = IDIOMS[st.order[st.index]];
     speakEnglish(current.en);
   });
 
