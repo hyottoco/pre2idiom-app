@@ -4,41 +4,89 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>英検準2級 熟語テスト（重複なしランダム）</title>
+
   <style>
+    /* =========================================================
+       基本（ライト）
+     ========================================================= */
     body {
       font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
-      margin: 0; padding: 20px;
+      margin: 0;
+      padding: 20px;
+      background: #ffffff;
+      color: #111;
+      transition: background .2s ease, color .2s ease;
     }
+
     .card {
-      max-width: 820px; margin: 0 auto;
-      padding: 18px; border: 1px solid #ddd; border-radius: 14px;
-    }
-    .top {
-      display:flex; justify-content:space-between; align-items:center;
-      gap:12px; flex-wrap:wrap;
-    }
-    .badge {
-      font-size: 14px; padding: 6px 10px; border-radius: 999px;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 18px;
       border: 1px solid #ddd;
+      border-radius: 14px;
+      background: #fff;
+      transition: background .2s ease, border-color .2s ease;
     }
+
+    .top {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .badge {
+      font-size: 14px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      background: transparent;
+      transition: background .2s ease, border-color .2s ease, color .2s ease;
+    }
+
     .row {
-      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
       margin-top: 10px;
     }
+
     .phrase {
-      font-size: 34px; font-weight: 800; margin: 18px 0 10px;
-      line-height: 1.15; word-break: break-word;
-    }
-    .meaning {
-      font-size: 24px; margin: 10px 0 0; min-height: 36px;
+      font-size: 34px;
+      font-weight: 800;
+      margin: 18px 0 10px;
+      line-height: 1.15;
       word-break: break-word;
     }
-    .btns { display:flex; gap:10px; margin-top: 16px; flex-wrap:wrap; }
+
+    .meaning {
+      font-size: 24px;
+      margin: 10px 0 0;
+      min-height: 36px;
+      word-break: break-word;
+    }
+
+    .btns {
+      display:flex;
+      gap:10px;
+      margin-top: 16px;
+      flex-wrap:wrap;
+    }
+
     button {
-      font-size: 18px; padding: 12px 14px; border-radius: 12px;
-      border: 1px solid #ddd; background: #fff; cursor: pointer;
+      font-size: 18px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      background: #fff;
+      color: #111;
+      cursor: pointer;
+      transition: background .2s ease, border-color .2s ease, color .2s ease;
     }
     button:active { transform: translateY(1px); }
+
     .primary { font-weight: 800; }
     .danger { border-color:#f2c; }
     .toggle { border-color:#88c; }
@@ -54,12 +102,48 @@
       gap: 10px;
       align-items: center;
       flex-wrap: wrap;
+      transition: background .2s ease, border-color .2s ease, color .2s ease;
     }
     .missBox.show { display:flex; }
     .missBox input { width: 22px; height: 22px; }
     .missBox .label { font-size: 16px; user-select: none; }
+
+    /* =========================================================
+       ダークモード（bodyに .dark を付ける）
+     ========================================================= */
+    body.dark {
+      background: #0f1115;
+      color: #e9e9ea;
+    }
+
+    body.dark .card {
+      background: #171a21;
+      border-color: #2a2f3a;
+    }
+
+    body.dark .badge {
+      border-color: #2a2f3a;
+      background: rgba(255,255,255,0.03);
+      color: #d6d6d8;
+    }
+
+    body.dark button {
+      background: #1f2430;
+      border-color: #2a2f3a;
+      color: #e9e9ea;
+    }
+
+    body.dark button:hover {
+      background: #252b3a;
+    }
+
+    body.dark .missBox {
+      border-color: #2a2f3a;
+      background: rgba(255,255,255,0.03);
+    }
   </style>
 </head>
+
 <body>
   <div class="card">
     <div class="top">
@@ -67,9 +151,10 @@
       <div class="badge" id="mode">熟語：英→日</div>
     </div>
 
-    <!-- 発音ON/OFF -->
+    <!-- 発音ON/OFF + テーマ切替（ここに追加） -->
     <div class="row">
       <button class="toggle small" id="audioToggle">🔊 発音：ON</button>
+      <button class="toggle small" id="themeToggle">🌙 ダーク</button>
     </div>
 
     <!-- 出題モード切替（全 / 間違いのみ） -->
@@ -102,7 +187,7 @@
 <script>
 /**
  * =========================================================
- *  英検準2級 熟語 300個（重複なし）  { en, ja } 形式
+ *  英検準2級 熟語（ { en, ja } 形式）
  * =========================================================
  */
 const IDIOMS = [
@@ -442,11 +527,10 @@ const IDIOMS = [
   { en: "on the way to ~", ja: "〜へ向かう途中で" },
 ];
 
-
 // =======================
 //  保存キー（追加分込み）
 // =======================
-const KEY_AUDIO      = "idioms_app_audio_on_v1";
+const KEY_AUDIO       = "idioms_app_audio_on_v1";
 
 // 全モード/間違いモードを別で進行保存
 const KEY_STATE_ALL   = "idioms_state_all_v1";
@@ -457,6 +541,9 @@ const KEY_WRONG_SET   = "idioms_wrong_set_v1";
 
 // 間違いのみモードON/OFF
 const KEY_WRONG_ONLY  = "idioms_wrong_only_v1";
+
+// ★テーマ（ライト/ダーク）
+const KEY_THEME       = "idioms_theme_v1";
 
 // =======================
 //  ユーティリティ
@@ -475,6 +562,23 @@ function loadJSON(key) {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
+}
+
+// =======================
+//  テーマ（ライト/ダーク）
+// =======================
+function loadTheme() {
+  const v = localStorage.getItem(KEY_THEME);
+  return (v === "dark" || v === "light") ? v : "light";
+}
+function saveTheme(theme) {
+  localStorage.setItem(KEY_THEME, theme);
+}
+function applyTheme(theme) {
+  const isDark = theme === "dark";
+  document.body.classList.toggle("dark", isDark);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = isDark ? "☀️ ライト" : "🌙 ダーク";
 }
 
 // =======================
@@ -695,6 +799,15 @@ function init() {
     document.getElementById("phrase").textContent = "IDIOMSが空です";
     return;
   }
+
+  // ★テーマ初期化（DOMがある状態で確実に反映）
+  applyTheme(loadTheme());
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    const now = loadTheme();
+    const next = (now === "dark") ? "light" : "dark";
+    saveTheme(next);
+    applyTheme(next);
+  });
 
   // voice読み込み遅延対策（iOS/Safari）
   if (window.speechSynthesis) {
