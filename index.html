@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>英熟語テスト（重複なしランダム）</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      margin: 0; padding: 20px;
+    }
+    .card {
+      max-width: 720px; margin: 0 auto; padding: 18px;
+      border: 1px solid #ddd; border-radius: 14px;
+    }
+    .top {
+      display:flex; justify-content:space-between; align-items:center;
+      gap:12px; flex-wrap:wrap;
+    }
+    .badge {
+      font-size: 14px; padding: 6px 10px;
+      border-radius: 999px; border: 1px solid #ddd;
+    }
+    .word { font-size: 44px; font-weight: 700; margin: 18px 0 10px; line-height: 1.1; }
+    .meaning { font-size: 28px; margin: 10px 0 0; min-height: 40px; }
+    .hint { color:#666; font-size:14px; margin-top: 10px; }
+    .btns { display:flex; gap:10px; margin-top: 18px; flex-wrap: wrap; }
+    button {
+      font-size: 18px; padding: 12px 14px; border-radius: 12px;
+      border: 1px solid #ddd; background: #fff;
+    }
+    button:active { transform: translateY(1px); }
+    .primary { font-weight: 700; }
+    .danger { border-color:#f2c; }
+
+    /* Toggle */
+    .toggle {
+      display:flex; align-items:center; gap:10px;
+      margin-top: 10px; padding: 10px 12px;
+      border: 1px solid #ddd; border-radius: 12px;
+    }
+    .toggle label { font-size: 16px; user-select: none; }
+    .toggle input { width: 20px; height: 20px; }
+    .small { font-size: 13px; color:#666; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <div class="badge" id="progress">0 / 0</div>
+      <div class="badge" id="mode">英→日</div>
+    </div>
+
+    <!-- 自動発音スイッチ -->
+    <div class="toggle">
+      <input type="checkbox" id="autoSpeakToggle" />
+      <label for="autoSpeakToggle">英語が表示されたら自動で発音する</label>
+    </div>
+    <div class="small">※iPadでは最初だけ「🔊発音」を1回押すと安定します。</div>
+
+    <div class="word" id="word">（単語リストを入れてください）</div>
+    <div class="meaning" id="meaning"></div>
+    <div class="hint" id="hint">ボタン：英語表示 → 日本語表示 → 次の英語 …（🔊で発音）</div>
+
+    <div class="btns">
+      <button class="primary" id="nextBtn">はじめる</button>
+      <button id="speakBtn">🔊 発音</button>
+      <button id="resetBtn" class="danger">リセット（最初から）</button>
+    </div>
+  </div>
+
+<script>
+/**
+ * ▼単語リスト（650語）
+ * 形式： { en: "apple", ja: "りんご" }
+ */
+
+const IDIOMS = [
+  { en: "be interested in ~", ja: "〜に興味がある" },
+  { en: "be famous for ~", ja: "〜で有名だ" },
+  { en: "be good at ~", ja: "〜が得意だ" },
+  { en: "be different from ~", ja: "〜と違う" },
+  { en: "be similar to ~", ja: "〜に似ている" },
+  { en: "be responsible for ~", ja: "〜に責任がある" },
+  { en: "be worried about ~", ja: "〜を心配している" },
+  { en: "be satisfied with ~", ja: "〜に満足している" },
+  { en: "be surprised at/by ~", ja: "〜に驚く" },
+  { en: "be proud of ~", ja: "〜を誇りに思う" },
+  { en: "be afraid of ~", ja: "〜を怖がる" },
+  { en: "be used to ~ / -ing", ja: "〜に慣れている" },
+  { en: "get used to ~", ja: "〜に慣れる" },
+  { en: "take care of ~", ja: "〜の世話をする" },
+  { en: "look for ~", ja: "〜を探す" },
+  { en: "look after ~", ja: "〜の世話をする" },
+  { en: "look forward to ~ / -ing", ja: "〜を楽しみにする" },
+  { en: "find out ~", ja: "〜を見つけ出す／知る" },
+  { en: "ask A for ~", ja: "Aに〜を頼む" },
+  { en: "help A (to) do", ja: "Aが〜するのを助ける" },
+  { en: "depend on ~", ja: "〜に依存する" },
+  { en: "rely on ~", ja: "〜に頼る" },
+  { en: "care about ~", ja: "〜を気にする" },
+  { en: "focus on ~", ja: "〜に集中する" },
+  { en: "concentrate on ~", ja: "〜に集中する" },
+  { en: "belong to ~", ja: "〜に所属する" },
+  { en: "agree with ~", ja: "〜に同意する" },
+  { en: "apologize for ~", ja: "〜を謝る" },
+  { en: "prepare for ~", ja: "〜に備える" },
+  { en: "apply for ~", ja: "〜に申し込む" },
+  { en: "pay for ~", ja: "〜の代金を払う" },
+  { en: "leave for ~", ja: "〜へ出発する" },
+  { en: "arrive at/in ~", ja: "〜に到着する" },
+  { en: "listen to ~", ja: "〜を聞く" },
+  { en: "talk about ~", ja: "〜について話す" },
+  { en: "think about ~", ja: "〜について考える" },
+  { en: "think of ~", ja: "〜を思いつく" },
+  { en: "hear from ~", ja: "〜から連絡をもらう" },
+  { en: "learn about ~", ja: "〜について学ぶ" },
+  { en: "worry about ~", ja: "〜を心配する" },
+  { en: "decide to do", ja: "〜すると決める" },
+  { en: "hope to do", ja: "〜したいと思う" },
+  { en: "plan to do", ja: "〜する予定だ" },
+  { en: "want to do", ja: "〜したい" },
+  { en: "try to do", ja: "〜しようとする" },
+  { en: "need to do", ja: "〜する必要がある" },
+  { en: "promise to do", ja: "〜すると約束する" },
+  { en: "refuse to do", ja: "〜するのを拒む" },
+  { en: "offer to do", ja: "〜すると申し出る" },
+  { en: "agree to do", ja: "〜することに同意する" },
+  { en: "enjoy -ing", ja: "〜するのを楽しむ" },
+  { en: "finish -ing", ja: "〜し終える" },
+  { en: "stop -ing", ja: "〜するのをやめる" },
+  { en: "keep -ing", ja: "〜し続ける" },
+  { en: "avoid -ing", ja: "〜するのを避ける" },
+  { en: "give up -ing", ja: "〜するのをあきらめる" },
+  { en: "be made of/from ~", ja: "〜でできている" },
+  { en: "be known as ~", ja: "〜として知られている" },
+  { en: "be called ~", ja: "〜と呼ばれる" },
+  { en: "be influenced by ~", ja: "〜に影響を受ける" },
+  { en: "be caused by ~", ja: "〜によって引き起こされる" },
+  { en: "result in ~", ja: "〜という結果になる" },
+  { en: "result from ~", ja: "〜から生じる" },
+  { en: "lead to ~", ja: "〜につながる" },
+  { en: "due to ~", ja: "〜のために" },
+  { en: "because of ~", ja: "〜のために" },
+  { en: "in my opinion", ja: "私の意見では" },
+  { en: "for example", ja: "例えば" },
+  { en: "such as ~", ja: "〜のような" },
+  { en: "in addition", ja: "さらに" },
+  { en: "as a result", ja: "その結果" },
+  { en: "on the other hand", ja: "一方で" },
+  { en: "in fact", ja: "実は" },
+  { en: "at least", ja: "少なくとも" },
+  { en: "more and more", ja: "ますます" },
+  { en: "not only A but also B", ja: "AだけでなくBも" },
+  { en: "get up", ja: "起きる" },
+  { en: "go to bed", ja: "寝る" },
+  { en: "wake up", ja: "目が覚める" },
+  { en: "take a break", ja: "休憩する" },
+  { en: "take a walk", ja: "散歩する" },
+  { en: "take a picture", ja: "写真を撮る" },
+  { en: "do homework", ja: "宿題をする" },
+  { en: "get along with ~", ja: "〜とうまくやる" },
+  { en: "make friends with ~", ja: "〜と友達になる" },
+  { en: "join a club", ja: "部活に入る" },
+  { en: "take part in ~", ja: "〜に参加する" },
+  { en: "be late for ~", ja: "〜に遅れる" },
+  { en: "be absent from ~", ja: "〜を欠席する" },
+  { en: "take notes", ja: "メモを取る" },
+  { en: "set up ~", ja: "〜を設立する／準備する" },
+  { en: "pick up ~", ja: "〜を拾う／迎えに行く／身につける" },
+  { en: "put off ~", ja: "〜を延期する" },
+  { en: "turn on/off ~", ja: "〜をつける／消す" },
+  { en: "run out of ~", ja: "〜を使い果たす" },
+  { en: "look up ~", ja: "〜を調べる" },
+  { en: "make up ~", ja: "〜を作り上げる／埋め合わせる" },
+  { en: "carry out ~", ja: "〜を実行する" },
+  { en: "deal with ~", ja: "〜に対処する" },
+  { en: "take advantage of ~", ja: "〜を利用する" },
+  { en: "according to ~", ja: "〜によれば" },
+  { en: "as soon as ~", ja: "〜するとすぐに" },
+  { en: "as well as ~", ja: "〜だけでなく…も" },
+  { en: "as ~ as possible", ja: "できるだけ〜" },
+  { en: "as a whole", ja: "全体として" },
+  { en: "at the same time", ja: "同時に" },
+  { en: "at first", ja: "最初は" },
+  { en: "at last", ja: "ついに" },
+  { en: "at once", ja: "すぐに" },
+  { en: "by the way", ja: "ところで" },
+  { en: "by the time ~", ja: "〜するまでに" },
+  { en: "in the end", ja: "結局" },
+  { en: "in general", ja: "一般的に" },
+  { en: "in particular", ja: "特に" },
+  { en: "in short", ja: "要するに" },
+  { en: "in other words", ja: "言い換えると" },
+  { en: "in that case", ja: "その場合" },
+  { en: "in the future", ja: "将来" },
+  { en: "from now on", ja: "これからは" },
+  { en: "so that ~", ja: "〜するために／〜となるように" },
+  { en: "take place", ja: "起こる／開催される" },
+  { en: "take turns", ja: "交代でする" },
+  { en: "take time", ja: "時間がかかる" },
+  { en: "take action", ja: "行動を起こす" },
+  { en: "take measures", ja: "対策を取る" },
+  { en: "take risks", ja: "危険を冒す" },
+  { en: "take responsibility for ~", ja: "〜の責任を取る" },
+  { en: "take an exam", ja: "試験を受ける" },
+  { en: "make a mistake", ja: "間違いをする" },
+  { en: "make a decision", ja: "決定する" },
+  { en: "make an effort", ja: "努力する" },
+  { en: "make sure (that) ~", ja: "必ず〜する／確認する" },
+  { en: "make a plan", ja: "計画を立てる" },
+  { en: "make use of ~", ja: "〜を活用する" },
+  { en: "make it", ja: "成功する／間に合う" },
+  { en: "have trouble (in) -ing", ja: "〜するのに苦労する" },
+  { en: "have a hard time (in) -ing", ja: "〜するのに苦労する" },
+  { en: "have an impact on ~", ja: "〜に影響を与える" },
+  { en: "have to do with ~", ja: "〜と関係がある" },
+  { en: "get in touch with ~", ja: "〜と連絡を取る" },
+  { en: "keep in touch with ~", ja: "〜と連絡を取り続ける" },
+  { en: "be in charge of ~", ja: "〜を担当している" },
+  { en: "be in danger", ja: "危険な状態だ" },
+  { en: "be in trouble", ja: "困っている" },
+  { en: "be in time for ~", ja: "〜に間に合う" },
+  { en: "be out of order", ja: "故障している" },
+  { en: "be out of stock", ja: "品切れだ" },
+  { en: "be out of date", ja: "時代遅れだ" },
+  { en: "be out of breath", ja: "息が切れている" },
+  { en: "look at ~", ja: "〜を見る" },
+  { en: "look into ~", ja: "〜を調べる" },
+  { en: "look around", ja: "見回す" },
+  { en: "look back on ~", ja: "〜を振り返る" },
+  { en: "look down on ~", ja: "〜を見下す" },
+  { en: "look over ~", ja: "〜に目を通す" },
+  { en: "look through ~", ja: "〜に目を通す／見抜く" },
+  { en: "come back", ja: "戻ってくる" },
+  { en: "come up with ~", ja: "〜を思いつく" },
+  { en: "come true", ja: "実現する" },
+  { en: "come to an end", ja: "終わる" },
+  { en: "go on", ja: "続く" },
+  { en: "go over ~", ja: "〜を復習する／詳しく調べる" },
+  { en: "go through ~", ja: "〜を経験する／通り抜ける" },
+  { en: "go out", ja: "出かける" },
+  { en: "go abroad", ja: "海外へ行く" },
+  { en: "put on ~", ja: "〜を身につける" },
+  { en: "put away ~", ja: "〜を片づける" },
+  { en: "put up with ~", ja: "〜を我慢する" },
+  { en: "put down ~", ja: "〜を書き留める／置く" },
+  { en: "turn up", ja: "現れる／音量を上げる" },
+  { en: "turn down", ja: "断る／音量を下げる" },
+  { en: "turn into ~", ja: "〜に変わる" },
+  { en: "bring up ~", ja: "〜を育てる／話題に出す" },
+  { en: "bring about ~", ja: "〜を引き起こす" },
+  { en: "bring A to B", ja: "AをBへ持っていく" },
+  { en: "keep up with ~", ja: "〜についていく" },
+  { en: "catch up with ~", ja: "〜に追いつく" },
+  { en: "catch a cold", ja: "風邪をひく" },
+  { en: "catch the bus/train", ja: "バス／電車に乗る" },
+  { en: "break down", ja: "故障する" },
+  { en: "break out", ja: "（火事・戦争などが）起こる" },
+  { en: "break up", ja: "別れる／解散する" },
+  { en: "call off ~", ja: "〜を中止する" },
+  { en: "call for ~", ja: "〜を必要とする" },
+  { en: "call back", ja: "折り返し電話する" },
+  { en: "take off", ja: "離陸する／脱ぐ" },
+  { en: "get on/off ~", ja: "（乗り物に）乗る／降りる" },
+  { en: "get to ~", ja: "〜に到着する" },
+  { en: "get over ~", ja: "〜を乗り越える／回復する" },
+  { en: "keep away from ~", ja: "〜に近づかない" },
+  { en: "stay away from ~", ja: "〜から離れている" },
+  { en: "be able to do", ja: "〜できる" },
+  { en: "be likely to do", ja: "〜しそうだ" },
+  { en: "be willing to do", ja: "進んで〜する" },
+  { en: "instead of ~", ja: "〜の代わりに" },
+  { en: "rather than ~", ja: "〜よりむしろ" },
+  { en: "even if ~", ja: "たとえ〜でも" },
+  { en: "even though ~", ja: "〜だけれども" },
+  { en: "all of a sudden", ja: "突然" },
+  { en: "once in a while", ja: "ときどき" },
+  { en: "from time to time", ja: "ときどき" },
+  { en: "every now and then", ja: "ときどき" },
+  { en: "no longer", ja: "もはや〜ない" },
+  { en: "at the age of ~", ja: "〜歳で" },
+  { en: "in order to do", ja: "〜するために" },
+  { en: "so as to do", ja: "〜するために" },
+  { en: "too ~ to do", ja: "〜すぎて…できない" },
+  { en: "~ enough to do", ja: "…できるほど十分に〜" },
+  { en: "have a chance to do", ja: "〜する機会がある" },
+  { en: "have no choice but to do", ja: "〜するしかない" },
+  { en: "take it easy", ja: "気楽にする" },
+  { en: "feel free to do", ja: "遠慮なく〜する" },
+
+  // ===== ここから追加：不足分 88個（重複なし）=====
+  { en: "as long as ~", ja: "〜である限り" },
+  { en: "as far as ~", ja: "〜に関する限り" },
+  { en: "as far as I know", ja: "私の知る限り" },
+  { en: "so far", ja: "今のところ／これまで" },
+  { en: "up to now", ja: "これまでのところ" },
+  { en: "for this reason", ja: "この理由で" },
+  { en: "for that reason", ja: "その理由で" },
+  { en: "as a matter of fact", ja: "実は" },
+  { en: "by accident", ja: "偶然に" },
+  { en: "on purpose", ja: "わざと" },
+  { en: "in advance", ja: "前もって" },
+  { en: "in detail", ja: "詳しく" },
+  { en: "in public", ja: "公の場で" },
+  { en: "in private", ja: "私的に" },
+  { en: "on average", ja: "平均して" },
+  { en: "by chance", ja: "偶然に" },
+  { en: "at random", ja: "無作為に" },
+  { en: "at risk", ja: "危険にさらされて" },
+  { en: "in danger of ~", ja: "〜の危険があって" },
+  { en: "in need of ~", ja: "〜を必要として" },
+  { en: "make progress", ja: "進歩する" },
+  { en: "make changes", ja: "変更を加える" },
+  { en: "make a difference", ja: "違いを生む" },
+  { en: "make sense", ja: "意味が通じる" },
+  { en: "make an attempt", ja: "試みる" },
+  { en: "make a contribution", ja: "貢献する" },
+  { en: "take steps", ja: "手段を取る" },
+  { en: "take responsibility", ja: "責任を負う" },
+  { en: "take control of ~", ja: "〜を管理する" },
+  { en: "take notice of ~", ja: "〜に気づく" },
+  { en: "pay attention to ~", ja: "〜に注意を払う" },
+  { en: "put effort into ~", ja: "〜に努力を注ぐ" },
+  { en: "put emphasis on ~", ja: "〜を重視する" },
+  { en: "show interest in ~", ja: "〜に興味を示す" },
+  { en: "show respect for ~", ja: "〜を尊重する" },
+  { en: "lose interest in ~", ja: "〜に興味を失う" },
+  { en: "keep an eye on ~", ja: "〜に注意して見る" },
+  { en: "keep in mind (that) ~", ja: "〜を心に留める" },
+  { en: "be related to ~", ja: "〜と関係がある" },
+  { en: "be involved in ~", ja: "〜に関わっている" },
+  { en: "be aware of ~", ja: "〜に気づいている" },
+  { en: "be familiar with ~", ja: "〜に詳しい" },
+  { en: "be suitable for ~", ja: "〜に適している" },
+  { en: "be available for ~", ja: "〜に利用できる" },
+  { en: "be known for ~", ja: "〜で知られている" },
+  { en: "be concerned about ~", ja: "〜を懸念している" },
+  { en: "be dependent on ~", ja: "〜に依存している" },
+  { en: "be independent of ~", ja: "〜から独立している" },
+  { en: "play an important role", ja: "重要な役割を果たす" },
+  { en: "play a part in ~", ja: "〜の一因となる" },
+  { en: "have an influence on ~", ja: "〜に影響を与える" },
+  { en: "have an effect on ~", ja: "〜に影響を及ぼす" },
+  { en: "have difficulty (in) ~", ja: "〜に困難がある" },
+  { en: "have a positive effect", ja: "良い影響がある" },
+  { en: "have a negative effect", ja: "悪影響がある" },
+  { en: "give an example of ~", ja: "〜の例を挙げる" },
+  { en: "give advice to ~", ja: "〜に助言する" },
+  { en: "from one point of view", ja: "ある観点から" },
+  { en: "to some extent", ja: "ある程度" },
+  { en: "to a certain degree", ja: "ある程度" },
+  { en: "at the moment", ja: "今のところ" },
+  { en: "at present", ja: "現在" },
+  { en: "for the time being", ja: "当分の間" },
+  { en: "on time", ja: "時間通りに" },
+  { en: "in time", ja: "間に合って" },
+  { en: "ahead of time", ja: "前もって" },
+  { en: "at the last minute", ja: "直前に" },
+  { en: "all the time", ja: "いつも" },
+  { en: "most of the time", ja: "たいてい" },
+  { en: "once again", ja: "もう一度" },
+  { en: "right away", ja: "すぐに" },
+  { en: "by hand", ja: "手作業で" },
+  { en: "by heart", ja: "暗記して" },
+  { en: "on foot", ja: "徒歩で" },
+  { en: "in common", ja: "共通して" },
+  { en: "one after another", ja: "次々に" },
+  { en: "step by step", ja: "一歩一歩" },
+  { en: "as time goes by", ja: "時がたつにつれて" },
+  { en: "with the help of ~", ja: "〜の助けで" },
+  { en: "without doubt", ja: "疑いなく" },
+  { en: "without hesitation", ja: "ためらわずに" },
+  { en: "in favor of ~", ja: "〜に賛成して" },
+  { en: "against the law", ja: "法律に反して" },
+  { en: "under pressure", ja: "圧力の下で" },
+  { en: "under control", ja: "管理下に" },
+  { en: "out of control", ja: "制御不能で" },
+  { en: "out of reach", ja: "手の届かない" },
+  { en: "on the way to ~", ja: "〜へ向かう途中で" },
+];
+
+
+
+
+
+
+
+// ======== 設定保存キー（自動発音ON/OFF） ========
+const AUTO_SPEAK_KEY = "vocab_auto_speak_v1";
+
+// ======== 発音（Web Speech API） ========
+function speakEnglish(text) {
+  if (!("speechSynthesis" in window)) return;
+
+  // 連打したとき前の音声を止める
+  window.speechSynthesis.cancel();
+
+  const uttr = new SpeechSynthesisUtterance(text);
+  uttr.rate = 0.9; // 少しゆっくり（0.1〜10）
+
+  // 英語の声を優先して選ぶ（端末依存）
+  const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+  const pick =
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("en-us")) ||
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("en-gb")) ||
+    voices.find(v => (v.lang || "").toLowerCase().startsWith("en")) ||
+    null;
+
+  uttr.lang = pick?.lang || "en-US";
+  if (pick) uttr.voice = pick;
+
+  window.speechSynthesis.speak(uttr);
+}
+
+// iOS Safari対策：声リストの準備
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    try { window.speechSynthesis.getVoices(); } catch {}
+  };
+}
+
+// ======== 保存キー（出題状態） ========
+const KEY = "vocab_app_state_v1";
+
+// ======== Fisher–Yates shuffle ========
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function freshState() {
+  const order = shuffle([...Array(VOCAB.length).keys()]);
+  return { order, index: 0, phase: 0 };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const st = JSON.parse(raw);
+    if (!st || !Array.isArray(st.order) || typeof st.index !== "number" || typeof st.phase !== "number") return null;
+    if (st.order.length !== VOCAB.length) return null;
+    if (st.index < 0 || st.index > VOCAB.length) return null;
+    if (st.phase !== 0 && st.phase !== 1) return null;
+    return st;
+  } catch {
+    return null;
+  }
+}
+
+function saveState(st) {
+  localStorage.setItem(KEY, JSON.stringify(st));
+}
+
+// ======== 自動発音設定の保存/読込 ========
+function loadAutoSpeak() {
+  try {
+    const raw = localStorage.getItem(AUTO_SPEAK_KEY);
+    if (raw === null) return false; // 初期OFF（好みでtrueにもできます）
+    return raw === "1";
+  } catch {
+    return false;
+  }
+}
+function saveAutoSpeak(on) {
+  localStorage.setItem(AUTO_SPEAK_KEY, on ? "1" : "0");
+}
+
+// ======== UI更新 ========
+function setUI(st) {
+  const wordEl = document.getElementById("word");
+  const meaningEl = document.getElementById("meaning");
+  const progressEl = document.getElementById("progress");
+  const btn = document.getElementById("nextBtn");
+
+  // 1周終わったら新しいシャッフルで再スタート
+  if (st.index >= VOCAB.length) {
+    st = freshState();
+    saveState(st);
+  }
+
+  const current = VOCAB[st.order[st.index]];
+  progressEl.textContent = `${st.index + 1} / ${VOCAB.length}`;
+
+  if (st.phase === 0) {
+    wordEl.textContent = current.en;
+    meaningEl.textContent = "";
+    btn.textContent = "日本語を表示（答え合わせ）";
+
+    // ★自動発音（ONのときだけ）
+    if (loadAutoSpeak()) {
+      speakEnglish(current.en);
+    }
+  } else {
+    wordEl.textContent = current.en;
+    meaningEl.textContent = current.ja;
+    btn.textContent = "正解だったかな？次へ語GO！";
+  }
+}
+
+// ======== 次へ（英→日→次の英） ========
+function nextAction() {
+  let st = loadState();
+  if (!st) st = freshState();
+
+  if (st.phase === 0) {
+    st.phase = 1;     // 日本語表示
+  } else {
+    st.phase = 0;     // 次の英語へ
+    st.index += 1;
+  }
+  saveState(st);
+  setUI(st);
+}
+
+function resetAll() {
+  const st = freshState();
+  saveState(st);
+  setUI(st);
+}
+
+// ======== 初期化 ========
+function init() {
+  if (!VOCAB.length) {
+    document.getElementById("word").textContent = "VOCABが空です（単語リストを入れてください）";
+    return;
+  }
+
+  // 自動発音トグルの初期反映
+  const toggle = document.getElementById("autoSpeakToggle");
+  toggle.checked = loadAutoSpeak();
+  toggle.addEventListener("change", () => {
+    saveAutoSpeak(toggle.checked);
+    // ONに切り替えた瞬間、表示中の英単語を読みたい場合は以下を有効化
+    if (toggle.checked) {
+      const st = loadState();
+      if (st && st.phase === 0) {
+        const current = VOCAB[st.order[st.index]];
+        speakEnglish(current.en);
+      }
+    }
+  });
+
+  let st = loadState();
+  if (!st) {
+    st = freshState();
+    saveState(st);
+  }
+  setUI(st);
+
+  document.getElementById("nextBtn").addEventListener("click", nextAction);
+
+  document.getElementById("speakBtn").addEventListener("click", () => {
+    const st = loadState();
+    if (!st) return;
+    const current = VOCAB[st.order[st.index]];
+    speakEnglish(current.en);
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", resetAll);
+}
+
+init();
+</script>
+</body>
+</html>
