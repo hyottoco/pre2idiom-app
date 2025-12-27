@@ -33,7 +33,6 @@
       font-size: 24px; margin: 10px 0 0; min-height: 36px;
       word-break: break-word;
     }
-    .hint { color:#666; font-size:14px; margin-top: 10px; }
     .btns { display:flex; gap:10px; margin-top: 16px; flex-wrap:wrap; }
     button {
       font-size: 18px; padding: 12px 14px; border-radius: 12px;
@@ -43,12 +42,22 @@
     .primary { font-weight: 800; }
     .danger { border-color:#f2c; }
     .toggle { border-color:#88c; }
-    .small {
-      font-size: 14px; padding: 10px 12px; border-radius: 12px;
+    .small { font-size: 14px; padding: 10px 12px; border-radius: 12px; }
+
+    /* 間違いチェック（答え合わせ時だけ表示） */
+    .missBox {
+      display:none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
     }
-    .sep {
-      width: 100%; height: 1px; background: #eee; margin: 14px 0 10px;
-    }
+    .missBox.show { display:flex; }
+    .missBox input { width: 22px; height: 22px; }
+    .missBox .label { font-size: 16px; user-select: none; }
   </style>
 </head>
 <body>
@@ -58,17 +67,31 @@
       <div class="badge" id="mode">熟語：英→日</div>
     </div>
 
+    <!-- 発音ON/OFF -->
     <div class="row">
       <button class="toggle small" id="audioToggle">🔊 発音：ON</button>
-      <div class="badge" id="audioInfo">voice: (auto)</div>
+    </div>
+
+    <!-- 出題モード切替（全 / 間違いのみ） -->
+    <div class="row">
+      <label class="badge" style="display:flex; gap:8px; align-items:center;">
+        <input type="checkbox" id="wrongOnlyToggle" style="width:18px;height:18px;" />
+        間違いリストだけ出題
+      </label>
+      <div class="badge" id="wrongCount">間違い: 0</div>
+      <button class="small danger" id="clearWrongBtn" type="button">間違いリストを消す</button>
     </div>
 
     <div class="phrase" id="phrase">（IDIOMSリストを読み込み中…）</div>
     <div class="meaning" id="meaning"></div>
 
-    <div class="hint" id="hint">ボタン：英語表示 → 日本語表示 → 次の英語 …（1周は重複なし）</div>
+    <!-- ★答え合わせ表示中だけ出る：間違えたチェック -->
+    <div class="missBox" id="missBox">
+      <input type="checkbox" id="missToggle" />
+      <label class="label" for="missToggle">この熟語は間違えた（間違いリストに入れる）</label>
+    </div>
 
-    <!-- ★ここを単語アプリと同じ並びに：次へ / 発音 / リセット -->
+    <!-- 次へ / 発音 / リセット -->
     <div class="btns">
       <button class="primary" id="nextBtn">はじめる</button>
       <button id="speakBtn">🔊 発音</button>
@@ -419,14 +442,24 @@ const IDIOMS = [
   { en: "on the way to ~", ja: "〜へ向かう途中で" },
 ];
 
-// =======================
-//  設定（保存キー）
-// =======================
-const KEY_STATE = "idioms_app_state_v1";
-const KEY_AUDIO = "idioms_app_audio_on_v1";
 
 // =======================
-//  Fisher–Yates shuffle
+//  保存キー（追加分込み）
+// =======================
+const KEY_AUDIO      = "idioms_app_audio_on_v1";
+
+// 全モード/間違いモードを別で進行保存
+const KEY_STATE_ALL   = "idioms_state_all_v1";
+const KEY_STATE_WRONG = "idioms_state_wrong_v1";
+
+// 間違いセット（en文字列で管理）
+const KEY_WRONG_SET   = "idioms_wrong_set_v1";
+
+// 間違いのみモードON/OFF
+const KEY_WRONG_ONLY  = "idioms_wrong_only_v1";
+
+// =======================
+//  ユーティリティ
 // =======================
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -436,37 +469,12 @@ function shuffle(arr) {
   return arr;
 }
 
-function freshState() {
-  const order = shuffle([...Array(IDIOMS.length).keys()]);
-  return { order, index: 0, phase: 0 }; // phase: 0=英語表示, 1=日本語表示
-}
-
-function loadState() {
+function saveJSON(key, obj) { localStorage.setItem(key, JSON.stringify(obj)); }
+function loadJSON(key) {
   try {
-    const raw = localStorage.getItem(KEY_STATE);
-    if (!raw) return null;
-    const st = JSON.parse(raw);
-    if (!st || !Array.isArray(st.order)) return null;
-    if (st.order.length !== IDIOMS.length) return null;
-    if (typeof st.index !== "number" || typeof st.phase !== "number") return null;
-    if (st.index < 0 || st.index > IDIOMS.length) return null;
-    if (st.phase !== 0 && st.phase !== 1) return null;
-    return st;
-  } catch {
-    return null;
-  }
-}
-
-function saveState(st) {
-  localStorage.setItem(KEY_STATE, JSON.stringify(st));
-}
-
-function loadAudioOn() {
-  const v = localStorage.getItem(KEY_AUDIO);
-  return v === null ? true : v === "1";
-}
-function saveAudioOn(on) {
-  localStorage.setItem(KEY_AUDIO, on ? "1" : "0");
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
 
 // =======================
@@ -483,7 +491,7 @@ function pickEnglishVoice() {
   return preferred;
 }
 
-// "~" を読ませない（空にする）
+// "~" を読ませない
 function cleanForSpeech(text) {
   return String(text)
     .replaceAll("~", "")
@@ -491,13 +499,21 @@ function cleanForSpeech(text) {
     .trim();
 }
 
+function loadAudioOn() {
+  const v = localStorage.getItem(KEY_AUDIO);
+  return v === null ? true : v === "1";
+}
+function saveAudioOn(on) {
+  localStorage.setItem(KEY_AUDIO, on ? "1" : "0");
+}
+
 function speakEnglish(text) {
   if (!window.speechSynthesis) return;
   if (!loadAudioOn()) return;
 
   try { speechSynthesis.cancel(); } catch {}
-
   const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
+
   const voice = pickEnglishVoice();
   u.lang = voice?.lang || "en-US";
   if (voice) u.voice = voice;
@@ -510,10 +526,79 @@ function speakEnglish(text) {
 function updateAudioUI() {
   const on = loadAudioOn();
   document.getElementById("audioToggle").textContent = on ? "🔊 発音：ON" : "🔇 発音：OFF";
+}
 
-  const v = pickEnglishVoice();
-  const label = v ? `voice: ${v.name} (${v.lang})` : "voice: (auto)";
-  document.getElementById("audioInfo").textContent = label;
+// =======================
+//  間違いリスト（Set）
+// =======================
+function loadWrongSet() {
+  const arr = loadJSON(KEY_WRONG_SET);
+  return new Set(Array.isArray(arr) ? arr : []);
+}
+function saveWrongSet(set) {
+  saveJSON(KEY_WRONG_SET, Array.from(set));
+}
+function updateWrongCountUI() {
+  const set = loadWrongSet();
+  document.getElementById("wrongCount").textContent = `間違い: ${set.size}`;
+}
+
+// =======================
+//  出題モード（全 / 間違いのみ）
+// =======================
+function loadWrongOnly() {
+  return localStorage.getItem(KEY_WRONG_ONLY) === "1";
+}
+function saveWrongOnly(on) {
+  localStorage.setItem(KEY_WRONG_ONLY, on ? "1" : "0");
+}
+function getActiveStateKey() {
+  return loadWrongOnly() ? KEY_STATE_WRONG : KEY_STATE_ALL;
+}
+
+// 出題プール（IDIOMSのindex配列）
+function getPoolIndices() {
+  if (!loadWrongOnly()) {
+    return [...Array(IDIOMS.length).keys()];
+  }
+  const set = loadWrongSet();
+  const idxs = [];
+  for (let i = 0; i < IDIOMS.length; i++) {
+    if (set.has(IDIOMS[i].en)) idxs.push(i);
+  }
+  return idxs;
+}
+
+function freshStateForPool(poolIdxs) {
+  const order = shuffle([...Array(poolIdxs.length).keys()]);
+  return { poolIdxs, order, index: 0, phase: 0 }; // phase:0英 1日
+}
+
+function loadState() {
+  const key = getActiveStateKey();
+  const st = loadJSON(key);
+  if (!st) return null;
+  if (!Array.isArray(st.poolIdxs) || !Array.isArray(st.order)) return null;
+  if (typeof st.index !== "number" || typeof st.phase !== "number") return null;
+  if (st.phase !== 0 && st.phase !== 1) return null;
+
+  // プールが変化したら作り直す（間違い追加/削除、モード変更など）
+  const poolNow = getPoolIndices();
+  if (st.poolIdxs.length !== poolNow.length) return null;
+
+  return st;
+}
+
+function saveState(st) {
+  const key = getActiveStateKey();
+  saveJSON(key, st);
+}
+
+// 現在の熟語取得
+function getCurrentItem(st) {
+  if (!st.poolIdxs.length) return null;
+  const poolIndex = st.poolIdxs[ st.order[st.index] ]; // IDIOMSのindex
+  return { item: IDIOMS[poolIndex], idiomIndex: poolIndex };
 }
 
 // =======================
@@ -523,20 +608,46 @@ function setUI(st) {
   const phraseEl = document.getElementById("phrase");
   const meaningEl = document.getElementById("meaning");
   const progressEl = document.getElementById("progress");
+  const modeEl = document.getElementById("mode");
   const btn = document.getElementById("nextBtn");
 
-  if (st.index >= IDIOMS.length) {
-    st = freshState();
+  const missBox = document.getElementById("missBox");
+  const missToggle = document.getElementById("missToggle");
+
+  modeEl.textContent = loadWrongOnly() ? "熟語：英→日（間違いのみ）" : "熟語：英→日";
+
+  // プールが空なら案内
+  if (!st.poolIdxs.length) {
+    phraseEl.textContent = "間違いリストが空です";
+    meaningEl.textContent = "「間違いリストだけ出題」をOFFにするか、間違いを登録してください。";
+    progressEl.textContent = "0 / 0";
+    btn.textContent = "はじめる";
+    missBox.classList.remove("show");
+    missToggle.checked = false;
+    return;
+  }
+
+  // 1周終わったら再シャッフル
+  if (st.index >= st.poolIdxs.length) {
+    st = freshStateForPool(getPoolIndices());
     saveState(st);
   }
 
-  const current = IDIOMS[st.order[st.index]];
-  progressEl.textContent = `${st.index + 1} / ${IDIOMS.length}`;
+  const cur = getCurrentItem(st);
+  const current = cur.item;
+
+  progressEl.textContent = `${st.index + 1} / ${st.poolIdxs.length}`;
+
+  // この熟語がすでに間違いリストにあるか
+  const wrongSet = loadWrongSet();
+  missToggle.checked = wrongSet.has(current.en);
 
   if (st.phase === 0) {
     phraseEl.textContent = current.en;
     meaningEl.textContent = "";
     btn.textContent = "日本語を表示（答え合わせ）";
+
+    missBox.classList.remove("show");
 
     // ★英語が表示された瞬間に発音（ONのとき）
     speakEnglish(current.en);
@@ -545,12 +656,18 @@ function setUI(st) {
     phraseEl.textContent = current.en;
     meaningEl.textContent = current.ja;
     btn.textContent = "正解だったかな？次へGO！";
+
+    // ★答え合わせ中だけチェック欄表示
+    missBox.classList.add("show");
   }
 }
 
 function nextAction() {
   let st = loadState();
-  if (!st) st = freshState();
+  if (!st) {
+    const pool = getPoolIndices();
+    st = freshStateForPool(pool);
+  }
 
   if (st.phase === 0) {
     st.phase = 1;
@@ -564,11 +681,15 @@ function nextAction() {
 
 function resetAll() {
   try { speechSynthesis.cancel(); } catch {}
-  const st = freshState();
+  const pool = getPoolIndices();
+  const st = freshStateForPool(pool);
   saveState(st);
   setUI(st);
 }
 
+// =======================
+//  初期化
+// =======================
 function init() {
   if (!IDIOMS.length) {
     document.getElementById("phrase").textContent = "IDIOMSが空です";
@@ -581,29 +702,76 @@ function init() {
     setTimeout(updateAudioUI, 200);
     setTimeout(updateAudioUI, 800);
   } else {
-    document.getElementById("audioInfo").textContent = "voice: (not supported)";
     document.getElementById("audioToggle").disabled = true;
     document.getElementById("speakBtn").disabled = true;
   }
 
-  let st = loadState();
-  if (!st) {
-    st = freshState();
+  // 間違い数表示
+  updateWrongCountUI();
+
+  // 間違いのみトグル初期化
+  const wrongOnlyToggle = document.getElementById("wrongOnlyToggle");
+  wrongOnlyToggle.checked = loadWrongOnly();
+  wrongOnlyToggle.addEventListener("change", () => {
+    saveWrongOnly(wrongOnlyToggle.checked);
+
+    // モード切替したら、そのモードで最初から
+    const pool = getPoolIndices();
+    const st = freshStateForPool(pool);
     saveState(st);
-  }
+
+    updateWrongCountUI();
+    setUI(st);
+  });
+
+  // 間違いチェック（答え合わせ中に押す）
+  document.getElementById("missToggle").addEventListener("change", (e) => {
+    const st = loadState();
+    if (!st) return;
+    const cur = getCurrentItem(st);
+    if (!cur) return;
+
+    const set = loadWrongSet();
+    if (e.target.checked) set.add(cur.item.en);
+    else set.delete(cur.item.en);
+
+    saveWrongSet(set);
+    updateWrongCountUI();
+  });
+
+  // 間違いリスト消去
+  document.getElementById("clearWrongBtn").addEventListener("click", () => {
+    saveWrongSet(new Set());
+    updateWrongCountUI();
+
+    // 間違いのみモード中ならプールが空になるのでUI更新
+    const pool = getPoolIndices();
+    const st = freshStateForPool(pool);
+    saveState(st);
+    setUI(st);
+  });
+
+  // 進行状態の初期化
+  const pool = getPoolIndices();
+  let st = loadState();
+  if (!st) st = freshStateForPool(pool);
+  saveState(st);
   setUI(st);
 
+  // 次へ / リセット
   document.getElementById("nextBtn").addEventListener("click", nextAction);
   document.getElementById("resetBtn").addEventListener("click", resetAll);
 
-  // ★追加：聞きたいときに押せる発音ボタン（単語アプリと同じ位置）
+  // 発音ボタン
   document.getElementById("speakBtn").addEventListener("click", () => {
     const st2 = loadState();
     if (!st2) return;
-    const cur = IDIOMS[st2.order[st2.index]];
-    speakEnglish(cur.en);
+    const cur = getCurrentItem(st2);
+    if (!cur) return;
+    speakEnglish(cur.item.en);
   });
 
+  // 発音ON/OFFトグル
   document.getElementById("audioToggle").addEventListener("click", () => {
     const on = loadAudioOn();
     saveAudioOn(!on);
@@ -612,8 +780,8 @@ function init() {
     // ONにした瞬間、今表示中の英語を1回読む（phase=0の時だけ）
     const st2 = loadState();
     if (st2 && st2.phase === 0) {
-      const cur = IDIOMS[st2.order[st2.index]];
-      speakEnglish(cur.en);
+      const cur = getCurrentItem(st2);
+      if (cur) speakEnglish(cur.item.en);
     }
   });
 }
